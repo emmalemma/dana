@@ -4,16 +4,18 @@ EventEmitter = events.EventEmitter
 
 module.exports = class Dana extends EventEmitter
 	constructor:(obj...)->
-		@load(obj...)
+		if obj.length
+			@load(obj...)
+		@prev = null
+		@die ->
 	
 	load:(@obj...)->
 		dana = @
 		
-		queue = 0
+		queue = 1
 		check =->
 			if --queue == 0
 				dana.resolve()
-				dana.handler dana.obj
 		
 		scan=(ob)->
 			if typeof ob is 'object'
@@ -30,38 +32,46 @@ module.exports = class Dana extends EventEmitter
 						scan ob[i]
 		
 		scan @obj
-		Muse.log 'scanned dana as',@obj
-		unless queue
-			@resolve()
-			@handler @obj
-	
-	handler:(obj)->
-		@emit 'success', obj...
-		@do = @_do
-		@on = @_on
+		check()
+		@
 		
 	do:(fn)->
 		d = new Dana
 		@on 'success', (args...)->
 			ee = fn(args...)
 			d.load ee
+		d.prev = @
 		d
+		
+	die:(fn)->
+		@on 'error', fn or (err)->
+								Muse.log err
+								throw new Error err
+		@
+			
 	
 	resolve:->	
 		if @filter
 			try
-				@obj = [@filter.apply(@obj[0], @obj)] if @filter	
+				@resolved = [@filter.apply(@obj[0], @obj)] if @filter
 			catch e
 				Muse.log 'Error in Dana filtering:'
 				throw e
+		else
+			@resolved = @obj
+		
+		@emit 'success', @resolved...
+		
+		@do = @do_resolved
+		@on = @on_resolved
 	
-	_do:(fn)->	
-		d = new Dana fn(@obj...)
+	do_resolved:(fn)->	
+		d = new Dana fn(@resolved...)
 		d
 		
-	_on:(name, fn)->
+	on_resolved:(name, fn)->
 		if name is 'success'
-			fn(@obj...)
+			fn(@resolved...)
 		
 	dana:(fn)->
 		d = new Dana @
@@ -70,7 +80,8 @@ module.exports = class Dana extends EventEmitter
 		
 	@wrap:(fn)->
 		(args...)->
-			d = new Dana args...
+			d = new Dana(args...)
 			d.do fn
-			
 		
+	@::__defineGetter__ 'or', ->@prev
+	@::__defineGetter__ 'and', ->@prev
