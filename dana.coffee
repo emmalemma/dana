@@ -35,10 +35,10 @@ module.exports = class Dana extends EventEmitter
 		check()
 		@
 		
-	do:(fn)->
+	do:(fn, that)->
 		d = new Dana
 		@on 'success', (args...)->
-			ee = fn.apply(args[0], args)
+			ee = fn.apply(that, args)
 			d.load ee
 		d.prev = @
 		d
@@ -65,8 +65,8 @@ module.exports = class Dana extends EventEmitter
 		@do = @do_resolved
 		@on = @on_resolved
 	
-	do_resolved:(fn)->	
-		d = new Dana fn(@resolved...)
+	do_resolved:(fn, that)->	
+		d = new Dana fn.apply(that, @resolved)
 		d
 		
 	on_resolved:(name, fn)->
@@ -81,7 +81,7 @@ module.exports = class Dana extends EventEmitter
 	@wrap:(fn)->
 		(args...)->
 			d = new Dana(args...)
-			d.do fn
+			d.do fn, @
 		
 	@::__defineGetter__ 'or', ->@prev
 	@::__defineGetter__ 'and', ->@prev

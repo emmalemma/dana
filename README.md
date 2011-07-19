@@ -1,55 +1,76 @@
 #Dana#
 *In Buddhism, Dāna (as in 'Donna') refers to the pure act of giving, expecting nothing in return.*
 
-###Dana is asynchronous flow control you don't have to think about.###
+###asynchronous flow control you don't have to think about###
 
-Dana objects are event emitters which encapsulate event emitters. 
+## The Dana Object ##
+
+A Dana object is just an Event Emitter with a few helper methods added.
+
+### new Dana ###
+`constructor:(obj...)->`
+The Dana constructor deep-scans its arguments for event emitters. If it finds any, it waits until all have fired success before firing success itself.
 
 	people = new Dana Person.get('John Smith'), Person.get('Mary Smith')
+	people.on 'success', (john, mary)-> #john and mary have loaded in this code
 
-When all emitters encapsulated have fired success, the Dana itself fires success with their results.
+### .do ###
+`.do( callback )`
+The `.do` method is a helper alias for `.on 'success'`. It additionally encapsulates the callback in Dana, and returns the result. This enables Dana to be chained:
 
-	people.do (john, mary)->console.log john.sex, mary.sex
-	# (eventually) outputs: male female
+	people = new Dana Person.get('John Smith'), Person.get('Mary Smith')
+	people.do(procreate)
+	.do (progeny)-> #progeny is available to this code
 
-Method chaining in Dana is a little different than usual; the `.do` method doesn't return its Dana, but rather a *new* Dana encapsulating the callback. Thus Dana can be easily chained:
+Note that this code will execute the same way whether `procreate` returns an Event Emitter or an immediate result.
 
-	procreate = people.do procreate
-	procreate.do (progeny)->console.log progeny.sex
-	# outputs male or female with roughly equal frequency
+### .die ###
+`.die( callback )`
+Likewise, `.die` is a convenience method for `.on 'error'`.
 
-Note that this behavior is the same whether the `procreate` function returns immediately, or returns an event emitter.
-
-If you do want to use a more traditional chaining syntax, each Dana remembers its parent as `.prev`, with the sugary aliases `.and` and `.or`.
-
-	people.do elope
-	.or.die (error)->console.log error
-	# Outputs NOT if there is an error in `elope`,
-	# but if there's a problem getting John and Mary
-
-You can add an error callback with `.die`.
-
-The Dana constructor searches deeply for event emitters, so named arguments work too.
-
-But the real fun comes with the convenience method `.dana`. `.dana` takes a filter function, and returns a Dana which resolves to the return value of that filter.
-
-	people.dana (john, mary)->mary.last_name
-	.do (name)->console.log name
+	people = new Dana Person.get('John Smith'), Person.get('Mary Smith')
+	people.do procreate
+	people.die (error)->Muse.log 'Failed to load a parent.'
 	
-	# outputs: sue
+### .prev ###
+`.prev`
+Since `.do` returns the Dana for the passed-in callback, methods chain forward serially, rather than in parallel. To make parallel chains possible, each Dana stores its parent Dana under `.prev`. (`.or` and `.and` are provided for sugar).
 
-This filtered Dana can naturally be provided in Dana itself. Thus any elaborate asynchronous flow can be constructed simply by pretending all of the methods have already returned:
+	people = new Dana Person.get('John Smith'), Person.get('Mary Smith')
+	people.do(procreate)
+	.prev.do(masticate)
+	# You can also use `.and` or `.or` if that seems more appropriate
+	.and.do(arbitrate)
+	.or.die(conflagrate)
+	# Watch out— this error will trip if `people` experiences an error,
+	# not `arbitrate` as you might guess
 
-	shows = Shows.list_ids()
+### .dana ###
+`.dana( filter )`
+The magic method. `.dana` simply returns a Dana which waits for its parent to fire success, and then fires success itself with the results of applying its filter function to its parent's resolution. That sounds a little unwieldy, but all it means is we can treat Dana as if they have already resolved with regards to other Dana.
+
+	people = new Dana Person.get('John Smith'), Person.get('Mary Smith')
+	sex = people.dana (john, mary)->mary.sex
+	
+	# Sex will resolve to 'female'... So we can pass it into another call
+	# (Assuming that Person.new is Dana-wrapped)
+	
+	baby = Person.new(sex: sex)
+	baby.do (baby)-> # `baby` (of appropriate sex) is available
+	
+## Oh, the possibilities! ##
+
+Using Dana, we can forget about flow control completely, simply treat all of our async calls as having resolved, and let the events sort the whole thing out.
+
+Let's say we're rendering a page for a concert somewhere. Using the gig id, we need to retrieve resources for the band, the venue, and the account associated with the band.
+
+Don't think about the flow control at all; just ask for what we want.
+
 	new Dana
-		show: show = Show.get(shows.dana -> @[0])
+		show: show = Show.get(show_id) 
 		band: band = Band.get(show.dana -> @id)
 		venue: venue = Venue.get(show.dana -> @venue)
 		account: Account.get(band.dana -> @account)
-	.do (details)->
+	.do ->
 		template.render details
 	.or.die (err)->console.log 'Error loading details:', err
-	
-	# Renders the template only once all of the resources have loaded.
-
-(Naturally this presumes that the various `.get` methods are wrapped by Dana.)
