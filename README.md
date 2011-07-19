@@ -71,6 +71,6 @@ Don't think about the flow control at all; just ask for what we want.
 		band: band = Band.get(show.dana -> @id)
 		venue: venue = Venue.get(show.dana -> @venue)
 		account: Account.get(band.dana -> @account)
-	.do ->
+	.do (details)->
 		template.render details
 	.or.die (err)->console.log 'Error loading details:', err
