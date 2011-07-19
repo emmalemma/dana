@@ -38,7 +38,7 @@ module.exports = class Dana extends EventEmitter
 	do:(fn)->
 		d = new Dana
 		@on 'success', (args...)->
-			ee = fn(args...)
+			ee = fn.apply(args[0], args)
 			d.load ee
 		d.prev = @
 		d
